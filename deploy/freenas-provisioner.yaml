@@ -1,0 +1,106 @@
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: freenas-iscsi
+provisioner: freenas-provisoner
+parameters:
+  rootDatasetName: "tank/kubernetes"
+  portalGroup: "1"
+  initiatorGroup: "1"
+  thinProvisioning: "true"
+  lunID: "0"
+  targetPortal: "server:3260"
+  initiatorName: "iqn.2001-04.com.kubernetes:storage"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: freenas-provisioner
+  namespace: storage
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: freenas-provisioner
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "update", "patch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: freenas-provisioner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: freenas-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: freenas-provisioner
+    namespace: storage
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: freenas-provisioner
+  namespace: storage
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: freenas-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: freenas-provisioner
+    namespace: storage
+roleRef:
+  kind: Role
+  name: freenas-provisioner
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: Deployment
+apiVersion: extensions/v1beta1
+metadata:
+  name: freenas-provisioner
+  namespace: storage
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: freenas-provisioner
+    spec:
+      serviceAccountName: freenas-provisioner
+      containers:
+        - name: freenas-provisioner
+          image: quay.io/jakekeeys/freenas-provisioner
+          env:
+            - name: PROVISIONER_NAME
+              value: freenas-provisoner
+            - name: STORAGE_CLASS_NAME
+              value: freenas-iscsi
+            - name: FREENAS_API_USER
+              value: root
+            - name: FREENAS_API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: freenasAPIPassword
+                  name: freenas-provisoner
+            - name: FREENAS_API_HOST
+              value: https://server

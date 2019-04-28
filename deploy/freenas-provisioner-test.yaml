@@ -1,0 +1,33 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: freenas-provisioner-test
+spec:
+  storageClassName: freenas-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: freenas-provisioner-test
+spec:
+  containers:
+    - name: freenas-provisioner-test
+      image: gcr.io/google_containers/busybox:1.24
+      command:
+        - "/bin/sh"
+        - "-c"
+        - "--"
+      args: [ "date >> /mnt/file.log && while true; do sleep 30; done;" ]
+      volumeMounts:
+        - name: freenas-provisioner-test
+          mountPath: "/mnt"
+  volumes:
+    - name: freenas-provisioner-test
+      persistentVolumeClaim:
+        claimName: freenas-provisioner-test
+
